@@ -2,8 +2,7 @@
 import {useRoute} from "vue-router";
 import {onMounted, reactive} from "vue";
 import {invoke} from "@tauri-apps/api/core";
-import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
-import {naturalSort, BlobReader} from '../utils';
+import {naturalSort} from '../utils';
 
 const route = useRoute();
 let zip_path = route?.query?.path;
@@ -12,12 +11,11 @@ const preview_list = reactive([]);
 // 自然排序函数
 onMounted(async () => {
   preview_list.length = 0;
-  const zipReader = new ZipReader(new BlobReader(zip_path, await invoke('read_file_size', {path: zip_path})));
-  const entries = (await zipReader.getEntries()).sort(naturalSort);
+  const entries = (await invoke('read_zip_entries', {path: zip_path})).sort(naturalSort);
   for (const entry of entries) {
     if (!entry.directory) {
-      const imageData = await entry.getData(new Uint8ArrayWriter());
-      const imageBlob = new Blob([imageData]);
+      const imageData = await invoke('read_zip_file', {path: zip_path, filename: entry.filename});
+      const imageBlob = new Blob([new Uint8Array(imageData)]);
       let imageURL = URL.createObjectURL(imageBlob);
       preview_list.push({preview: imageURL, filename: entry.filename});
     }

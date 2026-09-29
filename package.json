@@ -13,7 +13,6 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-os": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2",
-    "@zip.js/zip.js": "^2.7.53",
     "jaro-winkler": "^0.2.8",
     "nanoid": "^5.0.8",
     "vue": "^3.3.4",

@@ -9,8 +9,7 @@ import distance from "jaro-winkler";
 import SelectPathDialog from "../components/SelectPathDialog.vue";
 import ExclamationTriangleSvg from "../components/svg/exclamation-triangle-svg.vue";
 import {useRouter} from "vue-router";
-import {BlobWriter, ZipReader} from "@zip.js/zip.js";
-import {BlobReader, naturalSort} from '../utils';
+import {naturalSort} from '../utils';
 const router = useRouter();
 const isMobileApp = ref(os_type() === "android" || os_type() === "ios");
 const selectPathState = ref(false);
@@ -35,15 +34,14 @@ onMounted(async function () {
 
 async function extractFirstImage(file) {
   let imageSrc = null;
-  const zipReader = new ZipReader(new BlobReader(file, await invoke('read_file_size', {path: file})));
-  const entries = (await zipReader.getEntries()).sort(naturalSort);
+  const entries = (await invoke('read_zip_entries', {path: file})).sort(naturalSort);
   for (let entry of entries) {
     if (entry.filename.match(/\.(jpg|jpeg|png|gif|bmp|svg|webp)$/i)) {
-      imageSrc = URL.createObjectURL(await entry.getData(new BlobWriter()));
+      const imageData = await invoke('read_zip_file', {path: file, filename: entry.filename});
+      imageSrc = URL.createObjectURL(new Blob([new Uint8Array(imageData)]));
       break;
     }
   }
-  await zipReader.close();
   return {preview: imageSrc, count: entries.length};
 }
 

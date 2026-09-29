@@ -15,16 +15,6 @@ fn read_dir_list(path: &str) -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn read_file_size(path: &str) -> Result<u64, String> {
-    Ok(utils::read_file_size(path)?)
-}
-
-#[tauri::command]
-fn file_seek_read(path: &str, offset: u64, length: usize) -> Result<Vec<u8>, String> {
-    Ok(utils::file_seek_read(path, offset, length)?)
-}
-
-#[tauri::command]
 fn read_file_data(path: &str) -> Result<Value, String> {
     let mut file = fs::File::open(path).map_err(|e| format!("Failed to read file: {}", e))?;
     let metadata = file
@@ -55,6 +45,16 @@ fn read_file_data(path: &str) -> Result<Value, String> {
 }
 
 #[tauri::command]
+fn read_zip_entries(path: &str) -> Result<Vec<utils::zip_reader::ZipEntry>, String> {
+    Ok(utils::zip_reader::read_zip_entries(path)?)
+}
+
+#[tauri::command]
+fn read_zip_file(path: &str, filename: &str) -> Result<Vec<u8>, String> {
+    Ok(utils::zip_reader::read_zip_file(path, filename)?)
+}
+
+#[tauri::command]
 fn update_theme_state(is_dark: bool) -> Result<Value, String> {
     #[allow(unused_assignments)]
     #[allow(unused_mut)]
@@ -76,9 +76,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             read_dir_list,
-            read_file_size,
-            file_seek_read,
             read_file_data,
+            read_zip_entries,
+            read_zip_file,
             update_theme_state
         ])
         .run(tauri::generate_context!())
