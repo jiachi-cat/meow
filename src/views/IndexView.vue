@@ -1,5 +1,5 @@
 <script setup>
-import {onMounted, reactive, ref, watch} from "vue";
+import {onBeforeUnmount, onMounted, reactive, ref, watch} from "vue";
 import {nanoid} from 'nanoid/non-secure';
 import {invoke} from "@tauri-apps/api/core";
 import {type as os_type} from '@tauri-apps/plugin-os';
@@ -9,7 +9,6 @@ import distance from "jaro-winkler";
 import SelectPathDialog from "../components/SelectPathDialog.vue";
 import ExclamationTriangleSvg from "../components/svg/exclamation-triangle-svg.vue";
 import {useRouter} from "vue-router";
-import {naturalSort} from '../utils';
 const router = useRouter();
 const isMobileApp = ref(os_type() === "android" || os_type() === "ios");
 const selectPathState = ref(false);
@@ -32,34 +31,39 @@ onMounted(async function () {
   }
 });
 
-async function extractFirstImage(file) {
-  let imageSrc = null;
-  const entries = (await invoke('read_zip_entries', {path: file})).sort(naturalSort);
-  for (let entry of entries) {
-    if (entry.filename.match(/\.(jpg|jpeg|png|gif|bmp|svg|webp)$/i)) {
-      const imageData = await invoke('read_zip_file', {path: file, filename: entry.filename});
-      imageSrc = URL.createObjectURL(new Blob([new Uint8Array(imageData)]));
-      break;
-    }
-  }
-  return {preview: imageSrc, count: entries.length};
-}
-
 async function load_comic() {
   try {
     let dir_list = await invoke("read_dir_list", {path: target_path.value});
+    revokePreviewUrls();
     zip_list.length = 0;
     render_list.length = 0;
-    for (let i = 0; i < dir_list.length; i++) {
-      const file = dir_list[i];
-      if (file.name.split('.').pop().toLowerCase() === "zip") {
-        const comic_item = {...await extractFirstImage([target_path.value, file.name].join("/")), name: file.name};
-        zip_list.push(comic_item);
-        render_list.push(comic_item);
-      }
+    const zip_paths = dir_list
+        .filter((file) => file.name.split('.').pop().toLowerCase() === "zip")
+        .map((file) => [target_path.value, file.name].join("/"));
+    const cover_list = await invoke("index_zip_covers", {paths: zip_paths});
+
+    for (const item of cover_list) {
+      const comic_item = {
+        ...item,
+        preview: item.preview.length === 0
+            ? null
+            : URL.createObjectURL(new Blob([
+              new Uint8Array(item.preview)
+            ], {type: item.preview_mime}))
+      };
+      zip_list.push(comic_item);
+      render_list.push(comic_item);
     }
   } catch (e) {
     console.error(e);
+  }
+}
+
+function revokePreviewUrls() {
+  for (const item of zip_list) {
+    if (item.preview) {
+      URL.revokeObjectURL(item.preview);
+    }
   }
 }
 
@@ -104,6 +108,10 @@ async function saveTargetPath($event) {
   await load_comic();
   onSearchChange();
 }
+
+onBeforeUnmount(() => {
+  revokePreviewUrls();
+});
 </script>
 
 <template>
@@ -169,7 +177,3 @@ async function saveTargetPath($event) {
     </select-path-dialog>
   </div>
 </template>
-
-<style scoped>
-
-</style>

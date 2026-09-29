@@ -1,6 +1,7 @@
 use serde_json::Value;
 use std::fs;
 use std::io::Read;
+use tauri::Manager;
 mod utils;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -55,6 +56,19 @@ fn read_zip_file(path: &str, filename: &str) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
+fn index_zip_covers(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+) -> Result<Vec<utils::cover_cache::ZipCover>, String> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("Failed to resolve cover cache directory: {error}"))?;
+
+    utils::cover_cache::index_zip_covers(&cache_dir, &paths)
+}
+
+#[tauri::command]
 fn update_theme_state(is_dark: bool) -> Result<Value, String> {
     #[allow(unused_assignments)]
     #[allow(unused_mut)]
@@ -79,6 +93,7 @@ pub fn run() {
             read_file_data,
             read_zip_entries,
             read_zip_file,
+            index_zip_covers,
             update_theme_state
         ])
         .run(tauri::generate_context!())
