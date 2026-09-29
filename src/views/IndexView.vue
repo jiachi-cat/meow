@@ -1,5 +1,5 @@
 <script setup>
-import {onMounted, reactive, ref} from "vue";
+import {onMounted, reactive, ref, watch} from "vue";
 import {nanoid} from 'nanoid/non-secure';
 import {invoke} from "@tauri-apps/api/core";
 import {type as os_type} from '@tauri-apps/plugin-os';
@@ -11,19 +11,23 @@ import ExclamationTriangleSvg from "../components/svg/exclamation-triangle-svg.v
 import {useRouter} from "vue-router";
 import {BlobWriter, ZipReader} from "@zip.js/zip.js";
 import {BlobReader, naturalSort} from '../utils';
-
 const router = useRouter();
 const isMobileApp = ref(os_type() === "android" || os_type() === "ios");
 const selectPathState = ref(false);
 const target_path = ref("");
 const zip_list = reactive([]);
-const search_text = ref("");
+const search_text = ref(localStorage.getItem('search_text') ?? "");
 const render_list = reactive([]);
+
+watch(search_text, (value) => {
+  localStorage.setItem('search_text', value);
+});
 
 onMounted(async function () {
   try {
     target_path.value = localStorage.getItem('target_path') ?? "";
     await load_comic();
+    onSearchChange();
   } catch (e) {
     console.error(e);
   }
@@ -46,11 +50,14 @@ async function extractFirstImage(file) {
 async function load_comic() {
   try {
     let dir_list = await invoke("read_dir_list", {path: target_path.value});
+    zip_list.length = 0;
     render_list.length = 0;
     for (let i = 0; i < dir_list.length; i++) {
       const file = dir_list[i];
       if (file.name.split('.').pop().toLowerCase() === "zip") {
-        render_list.push({...await extractFirstImage([target_path.value, file.name].join("/")), name: file.name});
+        const comic_item = {...await extractFirstImage([target_path.value, file.name].join("/")), name: file.name};
+        zip_list.push(comic_item);
+        render_list.push(comic_item);
       }
     }
   } catch (e) {
@@ -83,19 +90,40 @@ function sortBySimilarity(target, data) {
 }
 
 function onSearchChange() {
+  const search_keyword = search_text.value.trim().toLocaleLowerCase();
   render_list.length = 0;
-  render_list.push(...sortBySimilarity(search_text.value, zip_list));
+  if (search_keyword === "") {
+    render_list.push(...zip_list);
+    return;
+  }
+  const filtered_list = zip_list.filter((item) => item.name.toLocaleLowerCase().includes(search_keyword));
+  render_list.push(...sortBySimilarity(search_text.value, filtered_list));
 }
 
 async function saveTargetPath($event) {
   target_path.value = $event?.path?.replaceAll("\\", "") ?? "";
   localStorage.setItem('target_path', target_path.value);
   await load_comic();
+  onSearchChange();
 }
 </script>
 
 <template>
   <div class="relative w-full">
+    <div class="pt-2 px-2 w-full">
+      <div
+          class="relative w-full h-10 bg-[--light-foreground] dark:bg-[--dark-foreground] rounded-lg text-[--light-text-color] dark:text-[--dark-text-color]">
+        <magnifying-glass-svg
+            class="absolute top-1/2 left-3 size-5 -translate-y-1/2 text-[--light-text-weak-color] dark:text-[--dark-text-weak-color]"/>
+        <input
+            v-model="search_text"
+            @input="onSearchChange"
+            class="size-full rounded-lg bg-transparent pl-10 pr-3 outline-none"
+            type="search"
+            placeholder="搜索"
+            aria-label="搜索"/>
+      </div>
+    </div>
     <div class="pt-2 px-2 w-full flex gap-2 justify-between flex-wrap">
       <div
           class="px-2 py-1.5 flex gap-1 items-center flex-wrap bg-[--light-foreground] dark:bg-[--dark-foreground] rounded-lg">
@@ -108,24 +136,18 @@ async function saveTargetPath($event) {
           {{ target_path === "" ? "请点击选择路径" : target_path }}
         </div>
       </div>
-      <div
-          class="px-2 py-1.5 flex gap-1 items-center flex-wrap bg-[--light-foreground] dark:bg-[--dark-foreground] rounded-lg overflow-hidden hidden">
-        <div
-            class="w-80 h-full relative bg-[--light-embossment] dark:bg-[--dark-embossment] rounded-lg text-[--light-text-color] dark:text-[--dark-text-color]">
-          <input class="pl-7 pr-1.5 size-full bg-transparent rounded-lg" placeholder="输入字符相似度排序"
-                 v-model="search_text" @input="onSearchChange($event)">
-          <magnifying-glass-svg
-              class="absolute top-1/2 left-1.5 translate-y-[-50%] size-5 text-[--light-text-weak-color] dark:text-[--dark-text-weak-color]"/>
-        </div>
-
-      </div>
     </div>
-    <div v-if="render_list.length === 0"
+    <div v-if="zip_list.length === 0"
          class="mt-10 py-10 mx-auto flex justify-center items-center flex-col text-[--light-text-weak-color] dark:text-[--dark-text-weak-color]">
       <exclamation-triangle-svg class="size-1/4"/>
       暂无阅读文件
     </div>
-    <ul :class="isMobileApp?'grid-cols-2':''"
+    <div v-else-if="render_list.length === 0"
+         class="mt-10 py-10 mx-auto flex justify-center items-center flex-col text-[--light-text-weak-color] dark:text-[--dark-text-weak-color]">
+      <exclamation-triangle-svg class="size-1/4"/>
+      没有匹配的文件
+    </div>
+    <ul v-else :class="isMobileApp?'grid-cols-2':''"
         class="w-full p-2 grid gap-2 min-[460px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
       <li v-for="item in render_list" :key="item.name"
           class=" p-2 w-full bg-[--light-foreground] dark:bg-[--dark-foreground] rounded-lg"
