@@ -20,7 +20,7 @@ android {
         // 创建一个新的签名配置，名字可以自定义
         create("releaseDebugKeystore") {
             // 指定 keystore 文件的位置
-            storeFile = file(System.getenv("USERPROFILE") + "\\.android\\debug.keystore")
+            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
             // keystore 的密码
             storePassword = "android"
             // key 的别名
